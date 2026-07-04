@@ -1,0 +1,55 @@
+services:
+  # PostgreSQL Veritabanı Katmanı
+  db:
+    image: postgres:15-alpine
+    container_name: fintrack_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: fintrack_user
+      POSTGRES_PASSWORD: fintrack_password_123
+      POSTGRES_DB: fintrack_db
+    ports:
+      - "5442:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U fintrack_user -d fintrack_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend Katmanı
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fintrack_backend
+    restart: always
+    ports:
+      - "8020:8000"
+    volumes:
+      - ./backend:/code
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://fintrack_user:fintrack_password_123@db:5432/fintrack_db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Next.js Frontend Katmanı
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fintrack_frontend
+    restart: always
+    ports:
+      - "3020:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+# Hatayı çözen kritik kısım: Tanımlanmamış volume hatasını engellemek için burayı ekliyoruz
+volumes:
+  postgres_data:
