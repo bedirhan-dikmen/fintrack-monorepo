@@ -2,21 +2,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.v1.card import router as card_router  # <-- Yeni Import!
 
-# FastAPI Uygulama Nesnesinin Başlatılması
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS (Cross-Origin Resource Sharing) Güvenlik Ayarları
-# Frontend (3020) ile Backend (8020) konteynerlerinin birbiriyle sorunsuz
-# konuşabilmesi için tarayıcı engellerini bu kurumsal protokol ile aşıyoruz.
-origins = [
-    "http://localhost:3020",      # Lokal frontend erişimi
-    "http://127.0.0.1:3020",
-]
-
+# CORS Ayarları
+origins = ["http://localhost:3020", "http://127.0.0.1:3020"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -25,15 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# İlk "Router / API Layer" Endpoint'imiz (Health Check)
+# Root Endpoint'ler
 @app.get("/", tags=["Health Check"])
 async def root():
-    return {
-        "status": "healthy",
-        "message": f"Welcome to {settings.PROJECT_NAME} Infrastructure",
-        "version": "v1.0.0"
-    }
+    return {"status": "healthy", "message": f"Welcome to {settings.PROJECT_NAME} Infrastructure"}
 
-@app.get(f"{settings.API_V1_STR}/health", tags=["Health Check"])
-async def health_check():
-    return {"status": "success", "database": "connected (async)"}
+# KART ROUTER'INI ENTEGRE EDİYORUZ
+app.include_router(card_router, prefix=settings.API_V1_STR)  # <-- Yeni Eklenen Satır!
