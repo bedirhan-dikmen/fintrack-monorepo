@@ -1,0 +1,18 @@
+# Python önbellek dosyaları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Yerel sanal ortamlar
+.venv/
+venv/
+ENV/
+
+# Next.js önbellek ve paketleri
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Çevre değişkenleri
+.env
