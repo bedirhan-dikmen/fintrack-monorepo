@@ -23,3 +23,13 @@ class CardResponse(BaseModel):
 
     class Config:
         from_attributes = True  # SQLAlchemy objesini otomatik Pydantic'e mapler
+
+
+# API'ye kart güncellenirken gönderilebilecek esnek veri yapısı
+class CardUpdate(BaseModel):
+    card_name: Optional[str] = Field(None, max_length=50, description="Kartın yeni adı")
+    card_holder_name: Optional[str] = Field(None, max_length=100, description="Yeni kart sahibi")
+    card_provider: Optional[str] = Field(None, max_length=20, description="Visa, Mastercard vb.")
+    last_four_digits: Optional[str] = Field(None, min_length=4, max_length=4, description="Yeni son 4 hane")
+    balance: Optional[float] = Field(None, ge=0, description="Güncel bakiye")
+
