@@ -1,9 +1,10 @@
+// frontend/src/app/page.tsx
 'use client';
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cardService, CardCreateInput } from '@/services/cardService';
-import { CreditCard, Plus, X, Loader2, User, PieChart as ChartIcon } from 'lucide-react';
+import { cardService, CardCreateInput, Card } from '@/services/cardService';
+import { CreditCard, Plus, X, Loader2, User, PieChart as ChartIcon, Trash2, Pencil } from 'lucide-react';
 // Recharts Bileşenlerini Dahil Ediyoruz
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
@@ -13,6 +14,7 @@ const COLORS = ['#10b981', '#06b6d4', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCardId, setEditingCardId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<CardCreateInput>({
     card_name: '',
@@ -28,13 +30,12 @@ export default function DashboardPage() {
     queryFn: cardService.getAllCards,
   });
 
-  // 2. VERİ GÖNDERME: Kart Ekle
+  // 2. VERİ GÖNDERME: Kart Ekle Mutation
   const createCardMutation = useMutation({
     mutationFn: cardService.createCard,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cards'] });
-      setIsModalOpen(false);
-      setFormData({ card_name: '', card_holder_name: '', card_provider: 'Visa', last_four_digits: '', balance: 0 });
+      closeModal();
     },
     onError: (error) => {
       alert('Kart eklenirken bir mühendislik hatası oluştu!');
@@ -42,17 +43,74 @@ export default function DashboardPage() {
     },
   });
 
+  // 3. VERİ GÜNCELLEME: Kart Düzenle Mutation
+  const updateCardMutation = useMutation({
+    mutationFn: cardService.updateCard,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+      closeModal();
+    },
+    onError: (error) => {
+      alert('Kart güncellenirken bir mühendislik hatası oluştu!');
+      console.error(error);
+    },
+  });
+
+  // 4. VERİ SİLME: Kart Sil Mutation
+  const deleteCardMutation = useMutation({
+    mutationFn: cardService.deleteCard,
+    onSuccess: () => {
+      // TanStack Query Cache'ini uçurarak ekranın anlık re-render olmasını sağlar
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+    },
+    onError: (error) => {
+      alert('Kart silinirken backend hatası oluştu!');
+      console.error(error);
+    },
+  });
+
+  // Düzenleme Modunu Açan Yardımcı Fonksiyon
+  const handleEditClick = (card: Card) => {
+    setEditingCardId(card.id);
+    setFormData({
+      card_name: card.card_name,
+      card_holder_name: card.card_holder_name,
+      card_provider: card.card_provider,
+      last_four_digits: card.last_four_digits,
+      balance: card.balance,
+    });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingCardId(null);
+    setFormData({ card_name: '', card_holder_name: '', card_provider: 'Visa', last_four_digits: '', balance: 0 });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.last_four_digits.length !== 4) {
       alert('Son 4 hane tam olarak 4 karakter olmalıdır!');
       return;
     }
-    createCardMutation.mutate(formData);
+
+    if (editingCardId !== null) {
+      // Eğer düzenleme modundaysak update tetikle
+      updateCardMutation.mutate({ id: editingCardId, data: formData });
+    } else {
+      // Yoksa yeni kart ekle
+      createCardMutation.mutate(formData);
+    }
+  };
+
+  const handleDeleteClick = (id: number, cardName: string) => {
+    if (confirm(`"${cardName}" isimli kartı silmek istediğinize emin misiniz?`)) {
+      deleteCardMutation.mutate(id);
+    }
   };
 
   // 📊 GRAFİK İÇİN VERİ DÖNÜŞTÜRME (Data Transformation)
-  // Backend'den gelen kart listesini Recharts'ın anlayacağı { name, value } formatına map'liyoruz
   const chartData = cards?.map(card => ({
     name: card.card_name,
     value: card.balance
@@ -148,13 +206,32 @@ export default function DashboardPage() {
               cards?.map((card) => (
                 <div
                   key={card.id}
-                  className="p-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-slate-700"
+                  className="p-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 shadow-xl transition-all duration-300 hover:border-slate-700 relative group"
                 >
+                  {/* Aksiyon Butonları (Sağ Üst Köşe) */}
+                  <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <button
+                      onClick={() => handleEditClick(card)}
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-amber-400 transition-colors"
+                      title="Düzenle"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(card.id, card.card_name)}
+                      disabled={deleteCardMutation.isPending}
+                      className="p-1.5 bg-slate-800 hover:bg-red-950 border border-slate-700 hover:border-red-900 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                      title="Sil"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
                   <div className="flex justify-between items-start mb-8">
                     <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 text-emerald-400">
                       <CreditCard className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-mono font-bold tracking-widest bg-slate-800 px-2.5 py-1 rounded-md text-slate-400 uppercase">
+                    <span className="text-xs font-mono font-bold tracking-widest bg-slate-800 px-2.5 py-1 rounded-md text-slate-400 uppercase mr-14 group-hover:mr-0 transition-all">
                       {card.card_provider}
                     </span>
                   </div>
@@ -177,7 +254,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">Numara</p>
-                        <p className="text-sm font-mono font-bold text-slate-300">•••• •••• •••• {card.last_four_digits}</p>
+                        <p className="text-sm font-mono font-bold text-slate-300">•••• {card.last_four_digits}</p>
                       </div>
                     </div>
                   </div>
@@ -188,15 +265,23 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* MODAL: Kart Ekleme Formu */}
+      {/* MODAL: Kart Ekleme / Düzenleme Formu */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-200">
+            <button onClick={closeModal} className="absolute right-4 top-4 text-slate-400 hover:text-slate-200">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Plus className="text-emerald-500 w-5 h-5" /> Yeni Kart Tanımla
+              {editingCardId !== null ? (
+                <>
+                  <Pencil className="text-amber-500 w-5 h-5" /> Kart Bilgilerini Güncelle
+                </>
+              ) : (
+                <>
+                  <Plus className="text-emerald-500 w-5 h-5" /> Yeni Kart Tanımla
+                </>
+              )}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -241,7 +326,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Başlangıç Bakiyesi (TL)</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Güncel Bakiye (TL)</label>
                 <input
                   type="number" step="0.01" required placeholder="0.00"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none font-mono"
@@ -250,10 +335,16 @@ export default function DashboardPage() {
                 />
               </div>
               <button
-                type="submit" disabled={createCardMutation.isPending}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 font-bold py-2.5 px-4 rounded-xl text-white shadow-lg flex items-center justify-center gap-2"
+                type="submit" disabled={createCardMutation.isPending || updateCardMutation.isPending}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 font-bold py-2.5 px-4 rounded-xl text-white shadow-lg flex items-center justify-center gap-2 transition-colors"
               >
-                {createCardMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sisteme Kaydet'}
+                {createCardMutation.isPending || updateCardMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : editingCardId !== null ? (
+                  'Değişiklikleri Kaydet'
+                ) : (
+                  'Sisteme Kaydet'
+                )}
               </button>
             </form>
           </div>
